@@ -1,0 +1,306 @@
+:root {
+  color: #172026;
+  background: #f5f7f4;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+main {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+}
+
+.sidebar {
+  background: #111719;
+  color: #f7fbfa;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.eyebrow {
+  color: #7aa58f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+nav {
+  display: grid;
+  gap: 10px;
+}
+
+button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: #176b87;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+nav button {
+  background: transparent;
+  color: #dce8e3;
+  justify-content: flex-start;
+}
+
+nav button.active,
+nav button:hover {
+  background: #243033;
+}
+
+.stat {
+  border-top: 1px solid #314044;
+  padding-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat span {
+  color: #aec4bc;
+}
+
+.stat strong {
+  font-size: 1.8rem;
+}
+
+.workspace {
+  padding: 28px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 22px;
+}
+
+.topbar {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #d8dfda;
+}
+
+.iconButton {
+  width: 42px;
+  padding: 0;
+  background: #d96c4a;
+}
+
+.panel,
+.chartPanel,
+.tableWrap {
+  background: #ffffff;
+  border: 1px solid #d8dfda;
+  border-radius: 8px;
+  padding: 22px;
+  box-shadow: 0 10px 32px rgba(23, 32, 38, 0.06);
+}
+
+.compact {
+  align-self: start;
+  display: grid;
+  gap: 14px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  color: #4c5a5d;
+  font-weight: 700;
+}
+
+input {
+  min-height: 44px;
+  border: 1px solid #c8d2cc;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #172026;
+  background: white;
+}
+
+.peopleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.person,
+.thumb {
+  border: 1px solid #d8dfda;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  background: #fbfcfb;
+}
+
+.person span,
+.thumb span,
+.summaryBand span {
+  color: #667579;
+  font-size: 0.92rem;
+}
+
+.cameraLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 22px;
+}
+
+.cameraSurface {
+  background: #0c1113;
+  border-radius: 8px;
+  min-height: 58vh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fileDrop {
+  border: 1px dashed #97aaa1;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f7faf8;
+}
+
+.resultsLayout {
+  display: grid;
+  gap: 18px;
+}
+
+.summaryBand {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summaryBand div {
+  background: #ffffff;
+  border-left: 4px solid #d96c4a;
+  border-radius: 8px;
+  padding: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.summaryBand strong {
+  font-size: 1.6rem;
+}
+
+.imageStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.thumb img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #eef2ef;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #e2e8e4;
+  padding: 12px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: #536165;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 880px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+
+  .cameraLayout,
+  .formGrid,
+  .summaryBand {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace {
+    padding: 18px;
+  }
+
+  .tableWrap {
+    overflow-x: auto;
+  }
+}
