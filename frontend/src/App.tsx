@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Camera, CircleUserRound, FlaskConical, RefreshCcw, Upload } from "lucide-react";
+import { BarChart3, Camera, CircleUserRound, FlaskConical, RefreshCcw, Search, Upload, X } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { analyzeImage, fetchExperiments, fetchPeople, registerPerson, resolveMediaUrl } from "./api";
-import type { AnalyzeResponse, ExperimentResult, Person } from "./types";
+import { analyzeImage, fetchExperiments, fetchPeople, recognizeImage, registerPerson, resolveMediaUrl } from "./api";
+import type { AnalyzeResponse, ExperimentResult, Person, RecognitionResult } from "./types";
 
 type Tab = "register" | "capture" | "results";
+
+interface LiveRecognition {
+  recognition: RecognitionResult;
+  updatedAt: number;
+}
+
+const AUTO_RECOGNITION_INTERVAL_MS = 1500;
 
 export function App() {
   const [tab, setTab] = useState<Tab>("capture");
@@ -16,8 +23,13 @@ export function App() {
   const [analysisFile, setAnalysisFile] = useState<File | null>(null);
   const [status, setStatus] = useState("Ready");
   const [isBusy, setIsBusy] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [autoRecognizing, setAutoRecognizing] = useState(false);
+  const [liveRecognition, setLiveRecognition] = useState<LiveRecognition | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recognitionTimerRef = useRef<number | null>(null);
 
   const refresh = async () => {
     const [peopleRows, experimentRows] = await Promise.all([fetchPeople(), fetchExperiments()]);
@@ -27,14 +39,11 @@ export function App() {
 
   useEffect(() => {
     refresh().catch((error) => setStatus(error.message));
+    return () => stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startCamera = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 960, height: 720 }, audio: false });
-    if (videoRef.current) videoRef.current.srcObject = stream;
-  };
-
-  const captureFrame = async () => {
+  const captureFrame = async (): Promise<File | null> => {
     if (!videoRef.current || !canvasRef.current) return null;
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -43,6 +52,64 @@ export function App() {
     canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
     return blob ? new File([blob], "webcam-capture.jpg", { type: "image/jpeg" }) : null;
+  };
+
+  const stopCamera = () => {
+    if (recognitionTimerRef.current !== null) {
+      window.clearInterval(recognitionTimerRef.current);
+      recognitionTimerRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOn(false);
+    setAutoRecognizing(false);
+    setLiveRecognition(null);
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 960, height: 720 }, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCameraOn(true);
+      setStatus("Camera on. Live recognition will identify who is in the frame.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not start camera.");
+    }
+  };
+
+  const runAutoRecognitionTick = async () => {
+    if (!cameraOn || !autoRecognizing) return;
+    const file = await captureFrame();
+    if (!file) return;
+    try {
+      const response = await recognizeImage(file);
+      setLiveRecognition({ recognition: response.recognition, updatedAt: Date.now() });
+    } catch {
+      // Silent — keep the previous live result; the camera keeps trying.
+    }
+  };
+
+  const toggleAutoRecognition = () => {
+    if (autoRecognizing) {
+      if (recognitionTimerRef.current !== null) {
+        window.clearInterval(recognitionTimerRef.current);
+        recognitionTimerRef.current = null;
+      }
+      setAutoRecognizing(false);
+      setLiveRecognition(null);
+      setStatus("Live recognition stopped.");
+    } else {
+      if (!cameraOn) {
+        setStatus("Start the camera first, then enable live recognition.");
+        return;
+      }
+      setAutoRecognizing(true);
+      setStatus("Live recognition running — looking for registered faces...");
+      runAutoRecognitionTick();
+      recognitionTimerRef.current = window.setInterval(runAutoRecognitionTick, AUTO_RECOGNITION_INTERVAL_MS);
+    }
   };
 
   const runAnalysis = async (file: File | null) => {
@@ -89,6 +156,13 @@ export function App() {
   const acceptedRows = chartRows.filter((row) => row.recognition.accepted);
   const bestRank = latest?.recommended_rank ?? acceptedRows.sort((a, b) => a.svd_rank - b.svd_rank)[0]?.svd_rank ?? null;
 
+  const livePersonName = liveRecognition?.recognition.accepted
+    ? liveRecognition.recognition.predicted_name
+    : null;
+  const liveConfidencePercent = liveRecognition
+    ? Math.round(liveRecognition.recognition.confidence * 100)
+    : 0;
+
   return (
     <main>
       <aside className="sidebar">
@@ -97,13 +171,13 @@ export function App() {
           <h1>SVD FaceVault</h1>
         </div>
         <nav>
-          <button className={tab === "register" ? "active" : ""} onClick={() => setTab("register")} title="Register">
+          <button className={tab === "register" ? "active" : ""} onClick={() => { setTab("register"); stopCamera(); }} title="Register">
             <CircleUserRound size={20} /> Register
           </button>
           <button className={tab === "capture" ? "active" : ""} onClick={() => setTab("capture")} title="Capture">
             <Camera size={20} /> Capture
           </button>
-          <button className={tab === "results" ? "active" : ""} onClick={() => setTab("results")} title="Results">
+          <button className={tab === "results" ? "active" : ""} onClick={() => { setTab("results"); stopCamera(); }} title="Results">
             <BarChart3 size={20} /> Results
           </button>
         </nav>
@@ -168,18 +242,65 @@ export function App() {
             <div className="cameraSurface">
               <video ref={videoRef} autoPlay muted playsInline />
               <canvas ref={canvasRef} hidden />
+
+              {cameraOn && (
+                <div className={`recognitionOverlay ${livePersonName ? "hit" : autoRecognizing ? "searching" : ""}`}>
+                  {livePersonName ? (
+                    <>
+                      <span className="overlayName">{livePersonName}</span>
+                      <span className="overlayConfidence">{liveConfidencePercent}% confidence</span>
+                      <span className="overlayHint">Recognized — press Capture & Analyze to run the SVD experiment</span>
+                    </>
+                  ) : autoRecognizing ? (
+                    <>
+                      <span className="overlayName">Scanning…</span>
+                      <span className="overlayConfidence">Looking for registered faces</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="overlayName">Camera on</span>
+                      <span className="overlayConfidence">Enable live recognition to identify people</span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {!cameraOn && (
+                <div className="cameraPlaceholder">
+                  <Camera size={40} />
+                  <p>Camera is off. Press Start Camera.</p>
+                </div>
+              )}
             </div>
+
             <div className="panel compact">
               <div className="sectionTitle">
                 <FlaskConical size={22} />
                 <h2>Compression Lab</h2>
               </div>
-              <button onClick={startCamera}>
-                <Camera size={18} /> Start Camera
+
+              {!cameraOn ? (
+                <button onClick={startCamera}>
+                  <Camera size={18} /> Start Camera
+                </button>
+              ) : (
+                <button className="outlineButton" onClick={stopCamera}>
+                  <X size={18} /> Stop Camera
+                </button>
+              )}
+
+              <button
+                className={autoRecognizing ? "activeButton" : ""}
+                disabled={!cameraOn}
+                onClick={toggleAutoRecognition}
+              >
+                <Search size={18} /> {autoRecognizing ? "Stop Live Recognition" : "Start Live Recognition"}
               </button>
-              <button disabled={isBusy} onClick={async () => runAnalysis(await captureFrame())}>
+
+              <button disabled={isBusy || !cameraOn} onClick={async () => runAnalysis(await captureFrame())}>
                 <FlaskConical size={18} /> Capture & Analyze
               </button>
+
               <label className="fileDrop">
                 Or upload a test image
                 <input
@@ -191,6 +312,16 @@ export function App() {
               <button disabled={isBusy || !analysisFile} onClick={() => runAnalysis(analysisFile)}>
                 <Upload size={18} /> Analyze Upload
               </button>
+
+              {liveRecognition && (
+                <div className="liveResult">
+                  <strong>Last live match</strong>
+                  <span className={liveRecognition.recognition.accepted ? "accept" : "reject"}>
+                    {liveRecognition.recognition.predicted_name} — {Math.round(liveRecognition.recognition.confidence * 100)}%
+                  </span>
+                  <span className="methodTag">{liveRecognition.recognition.method} · {liveRecognition.recognition.accepted ? "accepted" : "rejected"}</span>
+                </div>
+              )}
             </div>
           </section>
         )}

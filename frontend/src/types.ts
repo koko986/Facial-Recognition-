@@ -37,3 +37,10 @@ export type Person = {
   created_at: string;
   image_count: number;
 };
+
+export type RecognizeResponse = {
+  recognition: RecognitionResult;
+  accuracy_threshold: number;
+  image_url: string;
+  processing_time_ms: number;
+};

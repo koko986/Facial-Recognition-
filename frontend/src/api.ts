@@ -1,4 +1,4 @@
-import type { AnalyzeResponse, ExperimentResult, Person } from "./types";
+import type { AnalyzeResponse, ExperimentResult, Person, RecognizeResponse } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -36,4 +36,10 @@ export async function analyzeImage(file: File) {
   const form = new FormData();
   form.append("image", file);
   return parseResponse<AnalyzeResponse>(await fetch(`${API_URL}/api/analyze`, { method: "POST", body: form }));
+}
+
+export async function recognizeImage(file: File) {
+  const form = new FormData();
+  form.append("image", file);
+  return parseResponse<RecognizeResponse>(await fetch(`${API_URL}/api/recognize`, { method: "POST", body: form }));
 }

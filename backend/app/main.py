@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
-from .models import AnalyzeResponse, ExperimentResult, Person, RecognitionResult, RegisterResponse
+from .models import AnalyzeResponse, ExperimentResult, Person, RecognitionResult, RecognizeResponse, RegisterResponse
 from .sqlite_store import Repository
 from .vision import compression_stats, compute_svd, decode_image, encode_jpeg, preprocess_face, recognize_face
 
@@ -135,4 +135,39 @@ async def analyze_image(
         results=[ExperimentResult(**result) for result in results],
         recommended_rank=recommended,
         accuracy_threshold=settings.recognition_threshold,
+    )
+
+
+@app.post("/api/recognize", response_model=RecognizeResponse)
+async def recognize_only(
+    image: UploadFile = File(...),
+    repository: Repository = Depends(get_repository),
+    settings: Settings = Depends(get_settings),
+) -> RecognizeResponse:
+    """Lightweight real-time recognition — no SVD experiments or DB writes."""
+    import time
+
+    start = time.perf_counter()
+    data = await image.read()
+    try:
+        face = preprocess_face(decode_image(data))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    people = repository.list_people()
+    recognition = recognize_face(face, people, repository.image_paths_for_person, settings.recognition_threshold)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    # Persist the probe crop so the frontend can display what the camera saw.
+    path = repository.save_image_bytes(
+        encode_jpeg(face, quality=85),
+        "probe.jpg",
+        image_kind="original",
+    )
+
+    return RecognizeResponse(
+        recognition=RecognitionResult(**recognition),
+        accuracy_threshold=settings.recognition_threshold,
+        image_url=repository.public_url(path),
+        processing_time_ms=round(elapsed_ms, 2),
     )

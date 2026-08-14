@@ -41,6 +41,13 @@ class AnalyzeResponse(BaseModel):
     accuracy_threshold: float = Field(description="Confidence threshold used for recommendation.")
 
 
+class RecognizeResponse(BaseModel):
+    recognition: RecognitionResult
+    accuracy_threshold: float
+    image_url: str
+    processing_time_ms: float
+
+
 class RegisterResponse(BaseModel):
     person: Person
     image_urls: list[str]
