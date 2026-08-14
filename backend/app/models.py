@@ -41,11 +41,21 @@ class AnalyzeResponse(BaseModel):
     accuracy_threshold: float = Field(description="Confidence threshold used for recommendation.")
 
 
+class FaceBox(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+
+
 class RecognizeResponse(BaseModel):
     recognition: RecognitionResult
     accuracy_threshold: float
     image_url: str
     processing_time_ms: float
+    face_box: FaceBox | None = None
+    frame_width: int | None = None
+    frame_height: int | None = None
 
 
 class RegisterResponse(BaseModel):

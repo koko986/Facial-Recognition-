@@ -32,6 +32,10 @@ export async function registerPerson(name: string, files: File[]) {
   return parseResponse(await fetch(`${API_URL}/api/register`, { method: "POST", body: form }));
 }
 
+export async function deletePerson(personId: string) {
+  return parseResponse(await fetch(`${API_URL}/api/people/${personId}`, { method: "DELETE" }));
+}
+
 export async function analyzeImage(file: File) {
   const form = new FormData();
   form.append("image", file);

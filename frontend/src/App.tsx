@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Camera, CircleUserRound, FlaskConical, RefreshCcw, Search, Upload, X } from "lucide-react";
+import { BarChart3, Camera, CircleUserRound, FlaskConical, RefreshCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { analyzeImage, fetchExperiments, fetchPeople, recognizeImage, registerPerson, resolveMediaUrl } from "./api";
+import { analyzeImage, deletePerson, fetchExperiments, fetchPeople, recognizeImage, registerPerson, resolveMediaUrl } from "./api";
 import type { AnalyzeResponse, ExperimentResult, Person, RecognitionResult } from "./types";
 
 type Tab = "register" | "capture" | "results";
@@ -9,9 +9,12 @@ type Tab = "register" | "capture" | "results";
 interface LiveRecognition {
   recognition: RecognitionResult;
   updatedAt: number;
+  faceBox: { x: number; y: number; width: number; height: number } | null;
+  frameWidth: number;
+  frameHeight: number;
 }
 
-const AUTO_RECOGNITION_INTERVAL_MS = 1500;
+const AUTO_RECOGNITION_INTERVAL_MS = 1200;
 
 export function App() {
   const [tab, setTab] = useState<Tab>("capture");
@@ -28,8 +31,11 @@ export function App() {
   const [liveRecognition, setLiveRecognition] = useState<LiveRecognition | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionTimerRef = useRef<number | null>(null);
+  const cameraOnRef = useRef(false);
+  const autoRecognizingRef = useRef(false);
 
   const refresh = async () => {
     const [peopleRows, experimentRows] = await Promise.all([fetchPeople(), fetchExperiments()]);
@@ -59,52 +65,135 @@ export function App() {
       window.clearInterval(recognitionTimerRef.current);
       recognitionTimerRef.current = null;
     }
+    autoRecognizingRef.current = false;
+    cameraOnRef.current = false;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
     setAutoRecognizing(false);
     setLiveRecognition(null);
+    clearOverlay();
+  };
+
+  const clearOverlay = () => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const ctx = overlay.getContext("2d");
+    if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+  };
+
+  const drawOverlay = () => {
+    const overlay = overlayRef.current;
+    const video = videoRef.current;
+    if (!overlay || !video) return;
+    const ctx = overlay.getContext("2d");
+    if (!ctx) return;
+
+    const displayW = video.clientWidth;
+    const displayH = video.clientHeight;
+    if (displayW === 0 || displayH === 0) return;
+    overlay.width = displayW;
+    overlay.height = displayH;
+    ctx.clearRect(0, 0, displayW, displayH);
+
+    if (!liveRecognition || !liveRecognition.faceBox) return;
+
+    const box = liveRecognition.faceBox;
+    const frameW = liveRecognition.frameWidth;
+    const frameH = liveRecognition.frameHeight;
+    if (!frameW || !frameH) return;
+
+    // Map the face box from the captured frame coordinates to the displayed video size.
+    const scaleX = displayW / frameW;
+    const scaleY = displayH / frameH;
+    const x = box.x * scaleX;
+    const y = box.y * scaleY;
+    const w = box.width * scaleX;
+    const h = box.height * scaleY;
+
+    const accepted = liveRecognition.recognition.accepted;
+    const color = accepted ? "#2ee6a8" : "#ff5d5d";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, w, h);
+
+    // Corner accents.
+    const corner = 18;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x, y + corner); ctx.lineTo(x, y); ctx.lineTo(x + corner, y);
+    ctx.moveTo(x + w - corner, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + corner);
+    ctx.moveTo(x + w, y + h - corner); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - corner, y + h);
+    ctx.moveTo(x + corner, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - corner);
+    ctx.stroke();
+
+    // Name label above the box.
+    const label = `${liveRecognition.recognition.predicted_name}  ${Math.round(liveRecognition.recognition.confidence * 100)}%`;
+    ctx.font = "700 15px Inter, sans-serif";
+    const textW = ctx.measureText(label).width + 20;
+    const labelH = 28;
+    const labelX = x;
+    const labelY = Math.max(0, y - labelH - 8);
+    ctx.fillStyle = "rgba(10, 18, 16, 0.85)";
+    ctx.fillRect(labelX, labelY, textW, labelH);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(labelX, labelY, textW, labelH);
+    ctx.fillStyle = color;
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, labelX + 10, labelY + labelH / 2);
   };
 
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 960, height: 720 }, audio: false });
       streamRef.current = stream;
+      cameraOnRef.current = true;
       if (videoRef.current) videoRef.current.srcObject = stream;
       setCameraOn(true);
-      setStatus("Camera on. Live recognition will identify who is in the frame.");
+      setStatus("Camera on. Start live recognition to identify people.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not start camera.");
     }
   };
 
   const runAutoRecognitionTick = async () => {
-    if (!cameraOn || !autoRecognizing) return;
+    if (!cameraOnRef.current || !autoRecognizingRef.current) return;
     const file = await captureFrame();
     if (!file) return;
     try {
       const response = await recognizeImage(file);
-      setLiveRecognition({ recognition: response.recognition, updatedAt: Date.now() });
+      const video = videoRef.current;
+      setLiveRecognition({
+        recognition: response.recognition,
+        updatedAt: Date.now(),
+        faceBox: response.face_box,
+        frameWidth: response.frame_width ?? video?.videoWidth ?? 960,
+        frameHeight: response.frame_height ?? video?.videoHeight ?? 720,
+      });
     } catch {
       // Silent — keep the previous live result; the camera keeps trying.
     }
   };
 
   const toggleAutoRecognition = () => {
-    if (autoRecognizing) {
+    if (autoRecognizingRef.current) {
       if (recognitionTimerRef.current !== null) {
         window.clearInterval(recognitionTimerRef.current);
         recognitionTimerRef.current = null;
       }
+      autoRecognizingRef.current = false;
       setAutoRecognizing(false);
       setLiveRecognition(null);
+      clearOverlay();
       setStatus("Live recognition stopped.");
     } else {
-      if (!cameraOn) {
+      if (!cameraOnRef.current) {
         setStatus("Start the camera first, then enable live recognition.");
         return;
       }
+      autoRecognizingRef.current = true;
       setAutoRecognizing(true);
       setStatus("Live recognition running — looking for registered faces...");
       runAutoRecognitionTick();
@@ -152,16 +241,28 @@ export function App() {
     }
   };
 
+  const handleDeletePerson = async (person: Person) => {
+    if (!window.confirm(`Delete ${person.name} and all their training images?`)) return;
+    setIsBusy(true);
+    try {
+      await deletePerson(person.id);
+      await refresh();
+      setStatus(`${person.name} deleted.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Delete failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const chartRows = useMemo(() => latest?.results ?? experiments.slice(-12), [latest, experiments]);
   const acceptedRows = chartRows.filter((row) => row.recognition.accepted);
   const bestRank = latest?.recommended_rank ?? acceptedRows.sort((a, b) => a.svd_rank - b.svd_rank)[0]?.svd_rank ?? null;
 
-  const livePersonName = liveRecognition?.recognition.accepted
-    ? liveRecognition.recognition.predicted_name
-    : null;
-  const liveConfidencePercent = liveRecognition
-    ? Math.round(liveRecognition.recognition.confidence * 100)
-    : 0;
+  useEffect(() => {
+    drawOverlay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveRecognition, cameraOn]);
 
   return (
     <main>
@@ -231,6 +332,9 @@ export function App() {
                 <article className="person" key={person.id}>
                   <strong>{person.name}</strong>
                   <span>{person.image_count} training images</span>
+                  <button className="deleteButton" disabled={isBusy} onClick={() => handleDeletePerson(person)} title={`Delete ${person.name}`}>
+                    <Trash2 size={14} /> Delete
+                  </button>
                 </article>
               ))}
             </div>
@@ -242,28 +346,7 @@ export function App() {
             <div className="cameraSurface">
               <video ref={videoRef} autoPlay muted playsInline />
               <canvas ref={canvasRef} hidden />
-
-              {cameraOn && (
-                <div className={`recognitionOverlay ${livePersonName ? "hit" : autoRecognizing ? "searching" : ""}`}>
-                  {livePersonName ? (
-                    <>
-                      <span className="overlayName">{livePersonName}</span>
-                      <span className="overlayConfidence">{liveConfidencePercent}% confidence</span>
-                      <span className="overlayHint">Recognized — press Capture & Analyze to run the SVD experiment</span>
-                    </>
-                  ) : autoRecognizing ? (
-                    <>
-                      <span className="overlayName">Scanning…</span>
-                      <span className="overlayConfidence">Looking for registered faces</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="overlayName">Camera on</span>
-                      <span className="overlayConfidence">Enable live recognition to identify people</span>
-                    </>
-                  )}
-                </div>
-              )}
+              <canvas ref={overlayRef} className="faceOverlay" />
 
               {!cameraOn && (
                 <div className="cameraPlaceholder">

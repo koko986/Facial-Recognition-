@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     sqlite_path: Path = Path("data/facevault.db")
     svd_ranks: str = "5,10,20,30,50,100"
     recognition_threshold: float = 0.63
+    # Live webcam frames are noisier than uploaded stills; a slightly more
+    # forgiving bar keeps the same-person match from flickering in and out.
+    live_recognition_threshold: float = 0.55
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

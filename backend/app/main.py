@@ -6,9 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
-from .models import AnalyzeResponse, ExperimentResult, Person, RecognitionResult, RecognizeResponse, RegisterResponse
+from .models import AnalyzeResponse, ExperimentResult, FaceBox, Person, RecognitionResult, RecognizeResponse, RegisterResponse
 from .sqlite_store import Repository
-from .vision import compression_stats, compute_svd, decode_image, encode_jpeg, preprocess_face, recognize_face
+from .vision import compression_stats, compute_svd, decode_image, detect_face_region, encode_jpeg, preprocess_face, recognize_face
 
 settings = get_settings()
 settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -150,24 +150,51 @@ async def recognize_only(
     start = time.perf_counter()
     data = await image.read()
     try:
-        face = preprocess_face(decode_image(data))
+        decoded = decode_image(data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    people = repository.list_people()
-    recognition = recognize_face(face, people, repository.image_paths_for_person, settings.recognition_threshold)
-    elapsed_ms = (time.perf_counter() - start) * 1000
+    face, face_box = detect_face_region(decoded)
+    if face is None:
+        return RecognizeResponse(
+            recognition=RecognitionResult(
+                predicted_person_id=None,
+                predicted_name="No Face Detected",
+                confidence=0.0,
+                accepted=False,
+                method="detector",
+            ),
+            accuracy_threshold=settings.live_recognition_threshold,
+            image_url="",
+            processing_time_ms=round((time.perf_counter() - start) * 1000, 2),
+            face_box=None,
+            frame_width=int(decoded.shape[1]),
+            frame_height=int(decoded.shape[0]),
+        )
 
-    # Persist the probe crop so the frontend can display what the camera saw.
-    path = repository.save_image_bytes(
-        encode_jpeg(face, quality=85),
-        "probe.jpg",
-        image_kind="original",
+    people = repository.list_people()
+    recognition = recognize_face(
+        face,
+        people,
+        repository.image_paths_for_person,
+        settings.live_recognition_threshold,
+        require_separation=True,
     )
+    elapsed_ms = (time.perf_counter() - start) * 1000
 
     return RecognizeResponse(
         recognition=RecognitionResult(**recognition),
-        accuracy_threshold=settings.recognition_threshold,
-        image_url=repository.public_url(path),
+        accuracy_threshold=settings.live_recognition_threshold,
+        image_url="",
         processing_time_ms=round(elapsed_ms, 2),
+        face_box=FaceBox(x=face_box[0], y=face_box[1], width=face_box[2], height=face_box[3]),
+        frame_width=int(decoded.shape[1]),
+        frame_height=int(decoded.shape[0]),
     )
+
+
+@app.delete("/api/people/{person_id}")
+def delete_person(person_id: str, repository: Repository = Depends(get_repository)) -> dict[str, str]:
+    """Delete a registered person and all their training images."""
+    repository.delete_person(person_id)
+    return {"message": "Person deleted."}

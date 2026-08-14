@@ -139,6 +139,31 @@ class Repository:
             ).fetchall()
         return [Path(row["storage_path"]) for row in rows]
 
+    def delete_person(self, person_id: str) -> bool:
+        """Delete a person and all their training images."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "select storage_path from face_images where person_id = ? and image_kind = 'training'",
+                (person_id,),
+            ).fetchall()
+            connection.execute("delete from people where id = ?", (person_id,))
+            connection.execute("delete from face_images where person_id = ?", (person_id,))
+            connection.execute("update compression_experiments set person_id = null where person_id = ?", (person_id,))
+
+        for row in rows:
+            try:
+                Path(row["storage_path"]).unlink(missing_ok=True)
+            except OSError:
+                pass
+        try:
+            folder = self.images_dir / person_id
+            if folder.exists() and not any(folder.iterdir()):
+                folder.rmdir()
+        except OSError:
+            pass
+
+        return True
+
     def save_experiment(self, experiment: dict[str, Any]) -> None:
         recognition = experiment["recognition"]
         with self._connect() as connection:

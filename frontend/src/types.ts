@@ -38,9 +38,19 @@ export type Person = {
   image_count: number;
 };
 
+export type FaceBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type RecognizeResponse = {
   recognition: RecognitionResult;
   accuracy_threshold: number;
   image_url: string;
   processing_time_ms: number;
+  face_box: FaceBox | null;
+  frame_width: number | null;
+  frame_height: number | null;
 };

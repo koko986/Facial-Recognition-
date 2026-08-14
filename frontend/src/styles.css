@@ -232,49 +232,24 @@ video {
   padding: 24px;
 }
 
-.recognitionOverlay {
+.faceOverlay {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: rgba(10, 14, 16, 0.55);
-  text-align: center;
-  padding: 20px;
-  transition: background 0.3s ease;
+  pointer-events: none;
+  z-index: 2;
 }
 
-.recognitionOverlay.searching {
-  background: rgba(10, 14, 16, 0.45);
-}
-
-.recognitionOverlay.hit {
-  background: rgba(23, 107, 135, 0.72);
-}
-
-.overlayName {
-  font-size: 2.4rem;
-  font-weight: 800;
-  color: #ffffff;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-}
-
-.overlayConfidence {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #d8efdb;
-}
-
-.recognitionOverlay.hit .overlayConfidence {
-  color: #cdeee0;
-}
-
-.overlayHint {
+.deleteButton {
+  background: transparent;
+  border: 1px solid #c4552d;
+  color: #c4552d;
+  min-height: 32px;
+  padding: 0 10px;
   font-size: 0.85rem;
-  color: #e8f4ee;
-  opacity: 0.9;
+}
+
+.deleteButton:hover {
+  background: #fbe9e4;
 }
 
 .outlineButton {

@@ -186,6 +186,12 @@ $$
 \text{Confidence} \ge \text{threshold} \quad (\text{default } 0.63)
 $$
 
+Two practical notes for the live camera path (`/api/recognize`):
+
+- Webcam frames are noisier than uploaded stills, so live recognition uses a slightly more forgiving `LIVE_RECOGNITION_THRESHOLD` (default `0.55`). The analysis pipeline (`/api/analyze`) keeps the stricter `0.63` for consistent SVD experiments.
+- When more than one participant is registered, live recognition also requires the closest match to be clearly separated from the runner-up (at least 15% closer), so an unknown face is not accepted on raw distance alone.
+- Training-face LBPH histograms are extracted once and cached (keyed by file path/mtime/size), so each live frame only costs one histogram extraction and a distance sweep — no retraining per frame.
+
 ---
 
 ### 6. Histogram Fallback — Cosine Similarity
